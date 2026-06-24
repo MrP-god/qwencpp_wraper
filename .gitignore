@@ -1,0 +1,14 @@
+# KoboldCPP engine executable binary folder
+koboldcpp-concedo/
+
+# KoboldCPP temp files
+tmp_temp/
+
+# Python compiled cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local logs
+*.log
