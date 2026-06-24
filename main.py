@@ -36,7 +36,7 @@ def main():
             parser.error("Console mode requires --action, --model, and --tokenizer parameters. Run with --ui to launch the Web UI.")
             
         try:
-            start_server(args.action, args.model, args.tokenizer, args.voices)
+            start_server(args.action, args.model, args.tokenizer, args.voices, debug=True)
             print("\n" + "="*60)
             print(f"KoboldCPP Server is running with '{args.action}' action.")
             print(f"Web UI: http://127.0.0.1:{config.PORT}")

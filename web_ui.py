@@ -43,7 +43,8 @@ def scan_assets():
     return default_base, default_design, default_tok, default_voices
 
 # Start the server backend from Gradio controls
-def ui_start_server(action_type, model, tokenizer, voices_dir):
+def ui_start_server(action_type, model, tokenizer, voices_dir, 
+                    gpu_backend, use_tts_gpu, gpu_layers, threads, tts_threads, debug):
     if not model or not os.path.exists(model):
         return "Error: Model file does not exist. Please check your path.", check_status()
     if not tokenizer or not os.path.exists(tokenizer):
@@ -52,7 +53,31 @@ def ui_start_server(action_type, model, tokenizer, voices_dir):
         return "Error: Voices directory must exist for Voice Cloning mode.", check_status()
         
     try:
-        start_server(action_type, model, tokenizer, voices_dir)
+        # Convert empty strings or zeros to None for threads
+        t_val = int(threads) if threads and int(threads) > 0 else None
+        tt_val = int(tts_threads) if tts_threads and int(tts_threads) > 0 else None
+        layers_val = int(gpu_layers) if gpu_layers is not None else -1
+        
+        # Map human-readable dropdown choices to backend strings
+        backend_map = {
+            "Vulkan": "vulkan",
+            "CUDA (Nvidia)": "cuda",
+            "CPU Only": "cpu"
+        }
+        backend_str = backend_map.get(gpu_backend, "vulkan")
+        
+        start_server(
+            action_type=action_type, 
+            model_path=model, 
+            tokenizer_path=tokenizer, 
+            voices_dir=voices_dir,
+            gpu_backend=backend_str,
+            use_tts_gpu=use_tts_gpu,
+            gpu_layers=layers_val,
+            threads=t_val,
+            tts_threads=tt_val,
+            debug=debug
+        )
         return "Server initialized successfully!", check_status()
     except Exception as e:
         return f"Failed to start server: {e}", check_status()
@@ -216,6 +241,37 @@ def launch_ui(auto_start_args=None):
                     placeholder="Path to reference voices"
                 )
                 
+                with gr.Accordion("🔌 Performance & Debug Settings", open=False):
+                    gpu_backend = gr.Dropdown(
+                        choices=["Vulkan", "CUDA (Nvidia)", "CPU Only"],
+                        value="Vulkan",
+                        label="GPU Backend Mode"
+                    )
+                    use_tts_gpu = gr.Checkbox(
+                        value=True,
+                        label="Use GPU for TTS (--ttsgpu)"
+                    )
+                    gpu_layers = gr.Number(
+                        value=-1,
+                        label="GPU Layers to Offload (--gpulayers, -1 for auto)",
+                        precision=0
+                    )
+                    with gr.Row():
+                        threads = gr.Number(
+                            value=0,
+                            label="Main Threads (0 for default)",
+                            precision=0
+                        )
+                        tts_threads = gr.Number(
+                            value=0,
+                            label="TTS Threads (0 for default)",
+                            precision=0
+                        )
+                    debug_logs = gr.Checkbox(
+                        value=False,
+                        label="Verbose Terminal Output (Debug)"
+                    )
+                
                 with gr.Row():
                     btn_start = gr.Button("Start Server", variant="primary")
                     btn_stop = gr.Button("Stop Server", variant="stop")
@@ -320,7 +376,8 @@ def launch_ui(auto_start_args=None):
         
         btn_start.click(
             ui_start_server, 
-            inputs=[action_mode, model_path, tokenizer_path, voices_dir], 
+            inputs=[action_mode, model_path, tokenizer_path, voices_dir, 
+                    gpu_backend, use_tts_gpu, gpu_layers, threads, tts_threads, debug_logs], 
             outputs=[log_box, status_text]
         )
         btn_stop.click(ui_stop_server, outputs=[log_box, status_text])

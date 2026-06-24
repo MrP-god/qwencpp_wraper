@@ -29,7 +29,7 @@ def clone_voice(text: str, voice_ref: str, output_path: str, reference_text: str
     Clones a voice using a reference voice.
     Saves the output to the specified path (which can be a directory or a filename).
     """
-    print(f"[Package] Cloning voice: generating '{text[:50]}...' using ref '{voice_ref}'")
+    config.log(f"[Package] Cloning voice: generating '{text[:50]}...' using ref '{voice_ref}'")
     
     # Save the reference text transcript if provided
     if reference_text:
@@ -49,9 +49,9 @@ def clone_voice(text: str, voice_ref: str, output_path: str, reference_text: str
             try:
                 with open(ref_txt_path, "w", encoding="utf-8") as f:
                     f.write(reference_text)
-                print(f"[Package] Reference text saved to: {ref_txt_path}")
+                config.log(f"[Package] Reference text saved to: {ref_txt_path}")
             except Exception as e:
-                print(f"[Package] Warning: Could not save reference text to {ref_txt_path}: {e}")
+                config.log(f"[Package] Warning: Could not save reference text to {ref_txt_path}: {e}")
 
     # Generate the audio bytes
     audio_bytes = generate_tts(text=text, voice=voice_ref)
@@ -68,7 +68,7 @@ def clone_voice(text: str, voice_ref: str, output_path: str, reference_text: str
     with open(output_file, "wb") as f:
         f.write(audio_bytes)
         
-    print(f"[Package] Voice cloning successful! Saved to: {output_file}")
+    config.log(f"[Package] Voice cloning successful! Saved to: {output_file}")
     return output_file
 
 def design_voice(text: str, design_prompt: str, output_path: str):
@@ -76,7 +76,7 @@ def design_voice(text: str, design_prompt: str, output_path: str):
     Designs a voice using instructions.
     Saves the output to the specified path (which can be a directory or a filename).
     """
-    print(f"[Package] Designing voice: generating '{text[:50]}...' with instruction '{design_prompt}'")
+    config.log(f"[Package] Designing voice: generating '{text[:50]}...' with instruction '{design_prompt}'")
     
     # Generate a unique speaker ID to force a unique speaker seed
     speaker_name = f"designed_speaker_{random.randint(100000, 999999)}"
@@ -96,5 +96,5 @@ def design_voice(text: str, design_prompt: str, output_path: str):
     with open(output_file, "wb") as f:
         f.write(audio_bytes)
         
-    print(f"[Package] Voice design successful! Saved to: {output_file}")
+    config.log(f"[Package] Voice design successful! Saved to: {output_file}")
     return output_file

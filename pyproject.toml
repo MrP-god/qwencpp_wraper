@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "koboldcpp_wrapper_server"
+version = "1.0.0"
+description = "A Python wrapper and Web UI for KoboldCPP TTS (voice cloning and design)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "gradio>=4.0.0",
+]
+
+[project.scripts]
+kobold-tts-studio = "koboldcpp_wrapper_server.main:main"
+
+[tool.setuptools]
+package-dir = {"koboldcpp_wrapper_server" = "."}
+packages = ["koboldcpp_wrapper_server"]
+
+[tool.setuptools.exclude-package-data]
+koboldcpp_wrapper_server = [
+    "koboldcpp.exe",
+    "*.log",
+    "*.bat",
+    "tmp_temp/*",
+    "Voices/*"
+]
