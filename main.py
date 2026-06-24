@@ -3,10 +3,10 @@ import time
 import sys
 import os
 
-# Add parent directory of koboldcpp_wrapper_server to python path to allow imports
+# Add parent directory of qwencpp_wrapper to python path to allow imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from koboldcpp_wrapper_server import start_server, shutdown_server, launch_ui, config
+from qwencpp_wrapper import start_server, shutdown_server, launch_ui, config
 
 def main():
     parser = argparse.ArgumentParser(description="QwenTTS Server & Web UI CLI")

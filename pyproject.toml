@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "koboldcpp_wrapper_server"
+name = "qwencpp_wrapper"
 version = "1.0.0"
 description = "A Python wrapper and Web UI for QwenTTS (voice cloning and design)"
 readme = "README.md"
@@ -19,14 +19,14 @@ dependencies = [
 ]
 
 [project.scripts]
-kobold-tts-studio = "koboldcpp_wrapper_server.main:main"
+qwen-tts-studio = "qwencpp_wrapper.main:main"
 
 [tool.setuptools]
-package-dir = {"koboldcpp_wrapper_server" = "."}
-packages = ["koboldcpp_wrapper_server"]
+package-dir = {"qwencpp_wrapper" = "."}
+packages = ["qwencpp_wrapper"]
 
 [tool.setuptools.exclude-package-data]
-koboldcpp_wrapper_server = [
+qwencpp_wrapper = [
     "qwen-tts-server.exe",
     "*.log",
     "*.bat",

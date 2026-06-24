@@ -2,7 +2,7 @@ import urllib.request
 import json
 import os
 import random
-from koboldcpp_wrapper_server import config
+from qwencpp_wrapper import config
 
 def generate_tts(text: str, voice: str = None, instruction: str = None) -> bytes:
     """
@@ -39,7 +39,7 @@ def clone_voice(text: str, voice_ref: str, output_path: str, reference_text: str
         if os.path.isabs(voice_ref) or os.path.exists(voice_ref):
             ref_audio_path = os.path.abspath(voice_ref)
         else:
-            from koboldcpp_wrapper_server import qwen_server
+            from qwencpp_wrapper import qwen_server
             if qwen_server._active_server and qwen_server._active_server.voices_dir:
                 ref_audio_path = os.path.join(qwen_server._active_server.voices_dir, voice_ref)
             else:

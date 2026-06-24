@@ -3,7 +3,7 @@ import sys
 import time
 import subprocess
 import socket
-from koboldcpp_wrapper_server import config
+from qwencpp_wrapper import config
 
 class QwenServerManager:
     def __init__(self, action_type, model_path, tokenizer_path, voices_dir=None, 

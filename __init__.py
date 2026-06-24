@@ -1,3 +1,3 @@
-from koboldcpp_wrapper_server.qwen_server import start_server, shutdown_server
-from koboldcpp_wrapper_server.qwen_client import clone_voice, design_voice
-from koboldcpp_wrapper_server.web_ui import launch_ui
+from qwencpp_wrapper.qwen_server import start_server, shutdown_server
+from qwencpp_wrapper.qwen_client import clone_voice, design_voice
+from qwencpp_wrapper.web_ui import launch_ui

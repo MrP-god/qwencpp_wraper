@@ -3,7 +3,7 @@ import sys
 import shutil
 import gradio as gr
 import socket
-from koboldcpp_wrapper_server import start_server, shutdown_server, clone_voice, design_voice, config
+from qwencpp_wrapper import start_server, shutdown_server, clone_voice, design_voice, config
 
 # Check if the KoboldCPP server port is open
 def check_status():
