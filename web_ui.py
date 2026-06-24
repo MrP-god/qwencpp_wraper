@@ -9,6 +9,13 @@ from qwencpp_wrapper import start_server, shutdown_server, clone_voice, design_v
 
 languages_list = ["English", "Chinese", "Japanese", "Korean", "German", "French", "Russian", "Portuguese", "Spanish", "Italian"]
 
+cancel_generation = False
+
+def ui_stop_generation():
+    global cancel_generation
+    cancel_generation = True
+    return "Stop request sent. Wait for active generation to stop." 
+
 # Check if the KoboldCPP server port is open
 def check_status():
     try:
@@ -149,7 +156,6 @@ def render_history_html(history):
     if not history:
         return "<div style='color: #9CA3AF; text-align: center; padding: 2rem;'>No designed voices in this session yet. Enter text below and click 'Design & Synthesize'!</div>"
     
-    # Group items by phrase text
     grouped = {}
     for item in history:
         phrase = item["phrase"]
@@ -159,7 +165,6 @@ def render_history_html(history):
         
     html = "<div class='history-container' style='display: flex; flex-direction: column; gap: 1.25rem; margin-top: 1rem; max-height: 500px; overflow-y: auto; padding-right: 0.5rem;'>"
     
-    # We collect unique phrases in reverse order of their first appearance to show latest at top
     ordered_phrases = []
     for item in reversed(history):
         if item["phrase"] not in ordered_phrases:
@@ -167,11 +172,15 @@ def render_history_html(history):
             
     for phrase in ordered_phrases:
         clips = grouped[phrase]
+        safe_phrase = phrase.replace("'", "\\'").replace('"', '&quot;')
         html += f'''
         <div class="phrase-group" style="padding: 1rem; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(17, 24, 39, 0.45); backdrop-filter: blur(8px); display: flex; flex-direction: column; gap: 0.75rem;">
             <div style="border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 0.4rem; margin-bottom: 0.1rem; display: flex; justify-content: space-between; align-items: center;">
                 <h4 style="margin: 0; color: #818CF8; font-size: 0.95rem; font-weight: 700; word-break: break-all;">Phrase: "{phrase}"</h4>
-                <span style="font-size: 0.75rem; color: #9CA3AF; background: rgba(255,255,255,0.05); padding: 0.1rem 0.4rem; border-radius: 4px;">{len(clips)} clips</span>
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <span style="font-size: 0.75rem; color: #9CA3AF; background: rgba(255,255,255,0.05); padding: 0.1rem 0.4rem; border-radius: 4px;">{len(clips)} clips</span>
+                    <button onclick="deletePhrase('{safe_phrase}')" style="background: transparent; border: 1px solid rgba(239, 68, 68, 0.3); color: #EF4444; font-size: 0.75rem; cursor: pointer; font-weight: 600; padding: 0.1rem 0.4rem; border-radius: 4px; transition: all 0.2s ease;">🗑️ Delete Group</button>
+                </div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 0.6rem;">
         '''
@@ -198,6 +207,7 @@ def render_history_html(history):
                 <div style="display: flex; gap: 0.4rem;">
                     <a href="{audio_url}" download="voice_clip_{idx}.wav" style="display: inline-flex; align-items: center; justify-content: center; padding: 0.3rem 0.6rem; border-radius: 5px; border: 1px solid rgba(129, 140, 248, 0.25); background: rgba(99, 102, 241, 0.1); color: #818CF8; font-size: 0.75rem; text-decoration: none; font-weight: 600; transition: all 0.2s ease;">📥 WAV</a>
                     <a href="{json_url}" download="meta_clip_{idx}.json" style="display: inline-flex; align-items: center; justify-content: center; padding: 0.3rem 0.6rem; border-radius: 5px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); color: #D1D5DB; font-size: 0.75rem; text-decoration: none; font-weight: 600; transition: all 0.2s ease;">📄 JSON</a>
+                    <button onclick="deleteClip('{audio_url}')" style="display: inline-flex; align-items: center; justify-content: center; padding: 0.3rem 0.6rem; border-radius: 5px; border: 1px solid rgba(239, 68, 68, 0.25); background: rgba(239, 68, 68, 0.1); color: #EF4444; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease;">🗑️ Delete</button>
                 </div>
                 '''
             else:
@@ -207,9 +217,30 @@ def render_history_html(history):
             
         html += "</div></div>"
     html += "</div>"
+    
+    # Inject JavaScript triggers
+    html += '''<script>
+    function deleteClip(audioPath) {
+        const el = document.querySelector("#delete_trigger textarea") || document.querySelector("#delete_trigger input");
+        if (el) {
+            el.value = audioPath;
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+    }
+    function deletePhrase(phraseText) {
+        const el = document.querySelector("#delete_phrase_trigger textarea") || document.querySelector("#delete_phrase_trigger input");
+        if (el) {
+            el.value = phraseText;
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+    }
+    </script>'''
     return html
 
 def ui_design_voice_batch(text, language, prompt, multiplier, history):
+    global cancel_generation
+    cancel_generation = False
+    
     if not prompt.strip():
         raise gr.Error("Error: Instruction prompt cannot be empty.")
     if not text.strip():
@@ -235,7 +266,11 @@ def ui_design_voice_batch(text, language, prompt, multiplier, history):
         os.makedirs(output_dir, exist_ok=True)
         
         for i, phrase in enumerate(phrases):
+            if cancel_generation:
+                break
             for rep in range(1, int(multiplier) + 1):
+                if cancel_generation:
+                    break
                 step_count += 1
                 progress_msg = f"Generating Phrase {i+1}/{len(phrases)} ('{phrase[:20]}...') | Clip {rep}/{multiplier} (Step {step_count}/{total_steps})..."
                 yield history, render_history_html(history), progress_msg
@@ -258,11 +293,12 @@ def ui_design_voice_batch(text, language, prompt, multiplier, history):
                     with open(json_filepath, "w", encoding="utf-8") as f:
                         json.dump(meta, f, indent=2, ensure_ascii=False)
                     
-                    rel_wav = os.path.relpath(wav_filepath, os.getcwd()).replace("\\", "/")
-                    rel_json = os.path.relpath(json_filepath, os.getcwd()).replace("\\", "/")
+                    # Convert to absolute path formatted for Gradio server url
+                    abs_wav = os.path.abspath(wav_filepath).replace("\\", "/")
+                    abs_json = os.path.abspath(json_filepath).replace("\\", "/")
                     
-                    audio_url = f"/file={rel_wav}"
-                    json_url = f"/file={rel_json}"
+                    audio_url = f"/file={abs_wav}"
+                    json_url = f"/file={abs_json}"
                     
                     history.append({
                         "phrase": phrase,
@@ -282,9 +318,83 @@ def ui_design_voice_batch(text, language, prompt, multiplier, history):
                     
                 yield history, render_history_html(history), progress_msg
                 
-        yield history, render_history_html(history), "✅ Batch generation complete! Finished " + str(total_steps) + " clips."
+        if cancel_generation:
+            yield history, render_history_html(history), "⏹️ Generation stopped by user."
+        else:
+            yield history, render_history_html(history), "✅ Batch generation complete! Finished " + str(total_steps) + " clips."
     except Exception as e:
         raise gr.Error(f"Voice design batch generation failed: {e}")
+
+def on_delete_clip(audio_path, history):
+    if not audio_path or history is None:
+        return history, render_history_html(history)
+        
+    if audio_path.startswith("/file="):
+        path = audio_path[6:]
+    elif audio_path.startswith("file="):
+        path = audio_path[5:]
+    else:
+        path = audio_path
+        
+    path = os.path.abspath(path)
+    
+    # Delete wav
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+            print(f"[UI] Deleted audio file: {path}")
+    except Exception as e:
+        print(f"[UI] Error deleting WAV: {e}")
+        
+    # Delete json
+    json_path = os.path.splitext(path)[0] + ".json"
+    try:
+        if os.path.exists(json_path):
+            os.remove(json_path)
+            print(f"[UI] Deleted JSON file: {json_path}")
+    except Exception as e:
+        print(f"[UI] Error deleting JSON: {e}")
+        
+    # Filter history
+    new_history = []
+    for item in history:
+        item_path = item.get("audio_path", "")
+        def get_abs(p):
+            if p.startswith("/file="):
+                return os.path.abspath(p[6:])
+            return os.path.abspath(p)
+        if get_abs(item_path) != path:
+            new_history.append(item)
+            
+    return new_history, render_history_html(new_history)
+
+def on_delete_phrase(phrase, history):
+    if not phrase or history is None:
+        return history, render_history_html(history)
+        
+    for item in history:
+        if item.get("phrase") == phrase:
+            audio_path = item.get("audio_path", "")
+            if audio_path:
+                if audio_path.startswith("/file="):
+                    path = os.path.abspath(audio_path[6:])
+                else:
+                    path = os.path.abspath(audio_path)
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except Exception as e:
+                    print(f"[UI] Error deleting {path}: {e}")
+                
+                json_path = os.path.splitext(path)[0] + ".json"
+                try:
+                    if os.path.exists(json_path):
+                        os.remove(json_path)
+                except Exception as e:
+                    print(f"[UI] Error deleting {json_path}: {e}")
+                    
+    new_history = [item for item in history if item.get("phrase") != phrase]
+    return new_history, render_history_html(new_history)
 
 def get_voice_list(voices_dir):
     if not voices_dir or not os.path.exists(voices_dir):
@@ -350,13 +460,21 @@ def launch_ui(auto_start_args=None):
         except Exception as e:
             print(f"[UI] Autostart failed: {e}")
 
-    with gr.Blocks(title="QwenTTS Voice Studio", theme=gr.themes.Soft(primary_hue="teal", secondary_hue="slate")) as demo:
+    custom_css = """
+    #delete_trigger, #delete_phrase_trigger {
+        display: none !important;
+    }
+    """
+    with gr.Blocks(title="QwenTTS Voice Studio", theme=gr.themes.Soft(primary_hue="teal", secondary_hue="slate"), css=custom_css) as demo:
         gr.Markdown(
             """
             # 🎙️ QwenTTS Voice Studio
             An interactive dashboard to manage Qwen3-TTS (qwentts.cpp) and generate voice cloning/design outputs.
             """
         )
+        # Hidden inputs for browser JS triggers
+        delete_trigger = gr.Textbox(visible=True, elem_id="delete_trigger")
+        delete_phrase_trigger = gr.Textbox(visible=True, elem_id="delete_phrase_trigger")
         
         with gr.Row():
             # Server controls sidebar
@@ -470,7 +588,9 @@ def launch_ui(auto_start_args=None):
                             label="Save Output Filename"
                         )
                         
-                        btn_clone = gr.Button("⚡ Generate Cloned Voice", variant="primary")
+                        with gr.Row():
+                            btn_clone = gr.Button("⚡ Generate Cloned Voice", variant="primary")
+                            btn_stop_clone = gr.Button("⏹️ Stop Generation", variant="stop")
                         clone_audio = gr.Audio(label="Generated Audio", type="filepath")
                         clone_status = gr.Textbox(label="Status Log", interactive=False)
 
@@ -524,7 +644,9 @@ def launch_ui(auto_start_args=None):
                                 value=False
                             )
                         
-                        btn_design = gr.Button("✨ Design & Synthesize", variant="primary")
+                        with gr.Row():
+                            btn_design = gr.Button("✨ Design & Synthesize", variant="primary")
+                            btn_stop_design = gr.Button("⏹️ Stop Generation", variant="stop")
                         
                         # Progress & History
                         design_progress = gr.Textbox(
@@ -594,10 +716,26 @@ def launch_ui(auto_start_args=None):
             outputs=[design_history_state, design_history_html, design_progress]
         )
         
+        # Wiring for Stop Generation Buttons
+        btn_stop_clone.click(ui_stop_generation, outputs=clone_status)
+        btn_stop_design.click(ui_stop_generation, outputs=design_progress)
+        
+        # Wiring for browser-triggered Delete events
+        delete_trigger.change(
+            on_delete_clip, 
+            inputs=[delete_trigger, design_history_state], 
+            outputs=[design_history_state, design_history_html]
+        )
+        delete_phrase_trigger.change(
+            on_delete_phrase, 
+            inputs=[delete_phrase_trigger, design_history_state], 
+            outputs=[design_history_state, design_history_html]
+        )
+        
         # Shutdown server automatically when Gradio shuts down
         demo.unload(shutdown_server)
         
-    demo.launch(inbrowser=True)
+    demo.launch(inbrowser=True, allowed_paths=[os.getcwd()])
 
 if __name__ == "__main__":
     launch_ui()
