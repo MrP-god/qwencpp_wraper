@@ -239,27 +239,70 @@ def render_history_html(history):
     # Inject JavaScript triggers using hidden buttons to bypass Svelte reactive state blocks
     html += '''<script>
     function deleteClip(clipId) {
-        const el = document.querySelector("#delete_trigger textarea") || document.querySelector("#delete_trigger input");
-        const btn = document.querySelector("#delete_btn button") || document.querySelector("#delete_btn input") || document.querySelector("#delete_btn");
+        const wrapper = document.getElementById("delete_trigger");
+        if (!wrapper) {
+            console.error("delete_trigger wrapper not found");
+            return;
+        }
+        const el = wrapper.querySelector("textarea") || wrapper.querySelector("input");
+        const btnWrapper = document.getElementById("delete_btn");
+        if (!btnWrapper) {
+            console.error("delete_btn wrapper not found");
+            return;
+        }
+        const btn = btnWrapper.querySelector("button") || btnWrapper.querySelector("input") || btnWrapper;
         if (el && btn) {
-            el.value = clipId;
+            // Use native Svelte setter to force update
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set
+                || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+            if (nativeSetter) {
+                nativeSetter.call(el, clipId);
+            } else {
+                el.value = clipId;
+            }
             el.dispatchEvent(new Event("input", { bubbles: true }));
             el.dispatchEvent(new Event("change", { bubbles: true }));
-            btn.click();
+            
+            // Allow 50ms for Svelte store compilation before triggering backend
+            setTimeout(() => {
+                btn.click();
+            }, 50);
         } else {
-            console.error("Delete elements not found:", {el, btn});
+            console.error("Delete elements not found inside wrappers:", {el, btn});
         }
     }
+    
     function deletePhrase(phraseText) {
-        const el = document.querySelector("#delete_phrase_trigger textarea") || document.querySelector("#delete_phrase_trigger input");
-        const btn = document.querySelector("#delete_phrase_btn button") || document.querySelector("#delete_phrase_btn input") || document.querySelector("#delete_phrase_btn");
+        const wrapper = document.getElementById("delete_phrase_trigger");
+        if (!wrapper) {
+            console.error("delete_phrase_trigger wrapper not found");
+            return;
+        }
+        const el = wrapper.querySelector("textarea") || wrapper.querySelector("input");
+        const btnWrapper = document.getElementById("delete_phrase_btn");
+        if (!btnWrapper) {
+            console.error("delete_phrase_btn wrapper not found");
+            return;
+        }
+        const btn = btnWrapper.querySelector("button") || btnWrapper.querySelector("input") || btnWrapper;
         if (el && btn) {
-            el.value = phraseText;
+            // Use native Svelte setter to force update
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set
+                || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+            if (nativeSetter) {
+                nativeSetter.call(el, phraseText);
+            } else {
+                el.value = phraseText;
+            }
             el.dispatchEvent(new Event("input", { bubbles: true }));
             el.dispatchEvent(new Event("change", { bubbles: true }));
-            btn.click();
+            
+            // Allow 50ms for Svelte store compilation before triggering backend
+            setTimeout(() => {
+                btn.click();
+            }, 50);
         } else {
-            console.error("Delete Phrase elements not found:", {el, btn});
+            console.error("Delete Phrase elements not found inside wrappers:", {el, btn});
         }
     }
     </script>'''
@@ -417,9 +460,65 @@ def apply_preset(preset):
         return gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip()
     return presets[preset]
 
+
+# Persistent UI Configuration
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui_config.json")
+
+def load_ui_config():
+    defaults = {
+        "models_dir": os.getcwd(),
+        "voices_dir": os.path.join(os.getcwd(), "voices"),
+        "model_file": "",
+        "tokenizer_file": "",
+        "action_mode": "base",
+        "gpu_backend": "Vulkan",
+        "use_tts_gpu": True,
+        "threads": 0,
+        "debug_logs": False
+    }
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                defaults.update(saved)
+        except Exception as e:
+            print(f"[UI Config] Warning: Failed to load config: {e}")
+    return defaults
+
+def save_ui_config(config_dict):
+    try:
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(config_dict, f, indent=4, ensure_ascii=False)
+        print(f"[UI Config] Saved config to {CONFIG_PATH}")
+    except Exception as e:
+        print(f"[UI Config] Warning: Failed to save config: {e}")
+
+def get_gguf_files(folder_path):
+    if not folder_path or not os.path.exists(folder_path):
+        return [], []
+    try:
+        if not os.path.isdir(folder_path):
+            return [], []
+        files = os.listdir(folder_path)
+        ggufs = [f for f in files if f.endswith(".gguf") and "tokenizer" not in f.lower()]
+        tokenizers = [f for f in files if f.endswith(".gguf") and "tokenizer" in f.lower()]
+        return sorted(ggufs), sorted(tokenizers)
+    except Exception as e:
+        print(f"[UI] Error scanning folder {folder_path}: {e}")
+        return [], []
+
 # Launch function
 def launch_ui(auto_start_args=None):
-    default_base, default_design, default_tok, default_voices = scan_assets()
+    saved_cfg = load_ui_config()
+    models_dir_val = saved_cfg["models_dir"]
+    voices_dir_val = saved_cfg["voices_dir"]
+    
+    ggufs, tokenizers = get_gguf_files(models_dir_val)
+    default_model = saved_cfg["model_file"] if saved_cfg["model_file"] in ggufs else (ggufs[0] if ggufs else "")
+    default_tok = saved_cfg["tokenizer_file"] if saved_cfg["tokenizer_file"] in tokenizers else (tokenizers[0] if tokenizers else "")
+    default_voices = voices_dir_val
+    default_base = os.path.join(models_dir_val, default_model) if (models_dir_val and default_model) else ""
+    default_design = "" 
     
     # Auto-start if requested
     if auto_start_args:
@@ -436,7 +535,15 @@ def launch_ui(auto_start_args=None):
 
     custom_css = """
     #delete_trigger, #delete_phrase_trigger, #save_trigger, #delete_btn, #delete_phrase_btn, #save_btn {
-        display: none !important;
+        position: absolute !important;
+        width: 0px !important;
+        height: 0px !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        overflow: hidden !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
     }
     """
     with gr.Blocks(title="QwenTTS Voice Studio", theme=gr.themes.Soft(primary_hue="teal", secondary_hue="slate"), css=custom_css) as demo:
@@ -467,20 +574,38 @@ def launch_ui(auto_start_args=None):
                     label="Server Mode"
                 )
                 
+                models_dir_input = gr.Textbox(
+                    value=models_dir_val,
+                    label="Models Folder Path",
+                    placeholder="Path to folder containing GGUF models"
+                )
+                
+                model_dropdown = gr.Dropdown(
+                    choices=ggufs,
+                    value=default_model,
+                    label="Select Model GGUF"
+                )
+                
+                tokenizer_dropdown = gr.Dropdown(
+                    choices=tokenizers,
+                    value=default_tok,
+                    label="Select Tokenizer GGUF"
+                )
+                
                 model_path = gr.Textbox(
-                    value=auto_start_args.get("model_path", default_base) if auto_start_args else default_base, 
-                    label="Model Path (GGUF)", 
-                    placeholder="Path to model GGUF"
+                    value=os.path.join(models_dir_val, default_model) if (models_dir_val and default_model) else "", 
+                    label="Resolved Model Path (read-only)", 
+                    interactive=False
                 )
                 
                 tokenizer_path = gr.Textbox(
-                    value=auto_start_args.get("tokenizer_path", default_tok) if auto_start_args else default_tok, 
-                    label="Tokenizer Path (GGUF)", 
-                    placeholder="Path to tokenizer GGUF"
+                    value=os.path.join(models_dir_val, default_tok) if (models_dir_val and default_tok) else "", 
+                    label="Resolved Tokenizer Path (read-only)", 
+                    interactive=False
                 )
                 
                 voices_dir = gr.Textbox(
-                    value=auto_start_args.get("voices_dir", default_voices) if auto_start_args else default_voices, 
+                    value=voices_dir_val,
                     label="Voices Folder Path (Cloning only)", 
                     placeholder="Path to reference voices"
                 )
@@ -537,7 +662,7 @@ def launch_ui(auto_start_args=None):
                             lines=3
                         )
                         
-                        initial_voices = get_voice_list(voices_dir.value or default_voices)
+                        initial_voices = get_voice_list(voices_dir_val)
                         voice_dropdown = gr.Dropdown(
                             choices=initial_voices, 
                             label="Select Voice Template (.wav)", 
@@ -546,7 +671,7 @@ def launch_ui(auto_start_args=None):
                         
                         btn_refresh = gr.Button("🔄 Refresh Voice List", size="sm")
                         
-                        initial_transcript = load_voice_transcript(initial_voices[0], voices_dir.value or default_voices) if initial_voices else ""
+                        initial_transcript = load_voice_transcript(initial_voices[0], voices_dir_val) if initial_voices else ""
                         ref_text_box = gr.Textbox(
                             value=initial_transcript,
                             label="Voice Template Reference Text / Transcript (optional)",
@@ -650,11 +775,76 @@ def launch_ui(auto_start_args=None):
             outputs=ref_text_box
         )
         
+        def on_start_click(action_m, m_path, t_path, v_path, gpu_b, use_g, gpu_l, th, t_th, dbg, m_dir, v_dir, m_file, t_file):
+            cfg = {
+                "models_dir": m_dir,
+                "voices_dir": v_dir,
+                "model_file": m_file,
+                "tokenizer_file": t_file,
+                "action_mode": action_m,
+                "gpu_backend": gpu_b,
+                "use_tts_gpu": use_g,
+                "threads": th,
+                "debug_logs": dbg
+            }
+            save_ui_config(cfg)
+            return ui_start_server(action_m, m_path, t_path, v_path, gpu_b, use_g, gpu_l, th, t_th, dbg)
+
         btn_start.click(
-            ui_start_server, 
+            on_start_click, 
             inputs=[action_mode, model_path, tokenizer_path, voices_dir, 
-                    gpu_backend, use_tts_gpu, gpu_layers, threads, tts_threads, debug_logs], 
+                    gpu_backend, use_tts_gpu, gpu_layers, threads, tts_threads, debug_logs,
+                    models_dir_input, voices_dir, model_dropdown, tokenizer_dropdown], 
             outputs=[log_box, status_text]
+        )
+
+        # Reactive dropdown hooks
+        def on_voices_dir_change(v_dir):
+            voices = get_voice_list(v_dir)
+            sel_voice = voices[0] if voices else None
+            return gr.Dropdown(choices=voices, value=sel_voice)
+            
+        voices_dir.change(
+            on_voices_dir_change,
+            inputs=voices_dir,
+            outputs=voice_dropdown
+        )
+
+        def on_models_dir_change(m_dir):
+            ggufs, tokenizers = get_gguf_files(m_dir)
+            sel_model = ggufs[0] if ggufs else ""
+            sel_tok = tokenizers[0] if tokenizers else ""
+            m_path_val = os.path.join(m_dir, sel_model) if (m_dir and sel_model) else ""
+            t_path_val = os.path.join(m_dir, sel_tok) if (m_dir and sel_tok) else ""
+            return (
+                gr.Dropdown(choices=ggufs, value=sel_model),
+                gr.Dropdown(choices=tokenizers, value=sel_tok),
+                m_path_val,
+                t_path_val
+            )
+            
+        models_dir_input.change(
+            on_models_dir_change,
+            inputs=models_dir_input,
+            outputs=[model_dropdown, tokenizer_dropdown, model_path, tokenizer_path]
+        )
+        
+        def on_model_select(m_dir, m_file):
+            return os.path.join(m_dir, m_file) if (m_dir and m_file) else ""
+            
+        model_dropdown.change(
+            on_model_select,
+            inputs=[models_dir_input, model_dropdown],
+            outputs=model_path
+        )
+        
+        def on_tok_select(m_dir, t_file):
+            return os.path.join(m_dir, t_file) if (m_dir and t_file) else ""
+            
+        tokenizer_dropdown.change(
+            on_tok_select,
+            inputs=[models_dir_input, tokenizer_dropdown],
+            outputs=tokenizer_path
         )
         btn_stop.click(ui_stop_server, outputs=[log_box, status_text])
         
